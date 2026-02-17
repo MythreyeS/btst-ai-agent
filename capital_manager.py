@@ -3,46 +3,58 @@ import os
 
 CAPITAL_FILE = "data/capital.json"
 
-DEFAULT_CAPITAL = 10000
-RISK_PER_TRADE = 0.02  # 2% risk
+
+def _init_capital(initial=10000):
+    return {
+        "current_capital": initial,
+        "starting_capital": initial
+    }
 
 
-def initialize_capital():
-    os.makedirs("data", exist_ok=True)
-
+def load_capital():
     if not os.path.exists(CAPITAL_FILE):
-        data = {
-            "capital": DEFAULT_CAPITAL
-        }
-        with open(CAPITAL_FILE, "w") as f:
-            json.dump(data, f)
+        data = _init_capital()
+        save_capital(data)
+        return data
+
+    with open(CAPITAL_FILE, "r") as f:
+        return json.load(f)
+
+
+def save_capital(data):
+    os.makedirs("data", exist_ok=True)
+    with open(CAPITAL_FILE, "w") as f:
+        json.dump(data, f, indent=4)
 
 
 def get_capital():
-    initialize_capital()
-
-    with open(CAPITAL_FILE, "r") as f:
-        data = json.load(f)
-
-    return data["capital"]
+    data = load_capital()
+    return data["current_capital"]
 
 
-def update_capital(new_capital):
-    data = {"capital": new_capital}
+def set_capital(amount):
+    data = load_capital()
+    data["current_capital"] = amount
+    save_capital(data)
 
-    with open(CAPITAL_FILE, "w") as f:
-        json.dump(data, f)
+
+def update_capital(pnl):
+    data = load_capital()
+    data["current_capital"] += pnl
+    save_capital(data)
 
 
-def position_size(entry_price, stop_loss):
+def calculate_position_size(entry_price, risk_percent=2):
+    """
+    Risk-based position sizing.
+    Risk = 2% of capital by default.
+    """
+
     capital = get_capital()
+    risk_amount = capital * (risk_percent / 100)
 
-    risk_amount = capital * RISK_PER_TRADE
-    risk_per_share = abs(entry_price - stop_loss)
-
-    if risk_per_share == 0:
+    if entry_price <= 0:
         return 0
 
-    quantity = int(risk_amount / risk_per_share)
-
-    return max(quantity, 0)
+    quantity = int(risk_amount / entry_price)
+    return max(quantity, 1)
