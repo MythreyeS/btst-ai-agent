@@ -3,11 +3,6 @@ import numpy as np
 
 
 def calculate_rsi(data, period=14):
-    """
-    Standard RSI calculation.
-    Returns RSI series.
-    """
-
     delta = data["Close"].diff()
 
     gain = np.where(delta > 0, delta, 0)
@@ -22,15 +17,9 @@ def calculate_rsi(data, period=14):
     return rsi
 
 
-def rsi_score(data):
+def rsi_signal(data):
     """
-    Returns BTST-friendly RSI score.
-
-    Score Logic:
-        3 → Strong momentum (RSI 55–70)
-        2 → Mild bullish (RSI 50–55)
-        1 → Neutral (45–50)
-        0 → Weak / avoid
+    Returns BTST signal score based on RSI.
     """
 
     if len(data) < 20:
@@ -39,14 +28,18 @@ def rsi_score(data):
     rsi = calculate_rsi(data)
     latest_rsi = rsi.iloc[-1]
 
+    # Strong momentum zone
     if 55 <= latest_rsi <= 70:
         return 3
 
+    # Mild bullish
     elif 50 <= latest_rsi < 55:
         return 2
 
+    # Neutral
     elif 45 <= latest_rsi < 50:
         return 1
 
+    # Weak / avoid
     else:
         return 0
