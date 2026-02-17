@@ -2,17 +2,19 @@ import pandas as pd
 import numpy as np
 
 
-def calculate_rsi(series, period=14):
+def calculate_rsi(data, period=14):
     """
-    Calculate RSI indicator
+    Standard RSI calculation.
+    Returns RSI series.
     """
-    delta = series.diff()
 
-    gain = delta.clip(lower=0)
-    loss = -1 * delta.clip(upper=0)
+    delta = data["Close"].diff()
 
-    avg_gain = gain.rolling(period).mean()
-    avg_loss = loss.rolling(period).mean()
+    gain = np.where(delta > 0, delta, 0)
+    loss = np.where(delta < 0, -delta, 0)
+
+    avg_gain = pd.Series(gain).rolling(period).mean()
+    avg_loss = pd.Series(loss).rolling(period).mean()
 
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
@@ -20,27 +22,31 @@ def calculate_rsi(series, period=14):
     return rsi
 
 
-def rsi_signal(data):
+def rsi_score(data):
     """
-    Returns score based on RSI level
+    Returns BTST-friendly RSI score.
+
+    Score Logic:
+        3 → Strong momentum (RSI 55–70)
+        2 → Mild bullish (RSI 50–55)
+        1 → Neutral (45–50)
+        0 → Weak / avoid
     """
 
-    rsi = calculate_rsi(data["Close"])
-
-    latest_rsi = rsi.iloc[-1]
-
-    if np.isnan(latest_rsi):
+    if len(data) < 20:
         return 0
 
-    # 🔥 BTST Logic:
-    # 40–60 neutral accumulation zone
-    # 50–65 strong continuation zone
+    rsi = calculate_rsi(data)
+    latest_rsi = rsi.iloc[-1]
 
-    if 45 <= latest_rsi <= 60:
-        return 3   # Strong signal
-    elif 40 <= latest_rsi < 45:
+    if 55 <= latest_rsi <= 70:
+        return 3
+
+    elif 50 <= latest_rsi < 55:
         return 2
-    elif 60 < latest_rsi <= 65:
-        return 2
+
+    elif 45 <= latest_rsi < 50:
+        return 1
+
     else:
         return 0
