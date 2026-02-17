@@ -1,19 +1,46 @@
 import pandas as pd
-from core.indicators import rsi
+import numpy as np
 
-def rsi_score(df: pd.DataFrame, min_rsi: float = 55.0) -> float:
+
+def calculate_rsi(series, period=14):
     """
-    Returns 0..1 score based on RSI.
+    Calculate RSI indicator
     """
-    if df is None or df.empty or len(df) < 30:
-        return 0.0
-    df = df.copy()
-    df["RSI"] = rsi(df["Close"], 14)
-    val = float(df["RSI"].iloc[-1])
-    if pd.isna(val):
-        return 0.0
-    # score grows from min_rsi to 75
-    if val < min_rsi:
-        return 0.0
-    capped = min(val, 75.0)
-    return (capped - min_rsi) / (75.0 - min_rsi)
+    delta = series.diff()
+
+    gain = delta.clip(lower=0)
+    loss = -1 * delta.clip(upper=0)
+
+    avg_gain = gain.rolling(period).mean()
+    avg_loss = loss.rolling(period).mean()
+
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+
+    return rsi
+
+
+def rsi_signal(data):
+    """
+    Returns score based on RSI level
+    """
+
+    rsi = calculate_rsi(data["Close"])
+
+    latest_rsi = rsi.iloc[-1]
+
+    if np.isnan(latest_rsi):
+        return 0
+
+    # 🔥 BTST Logic:
+    # 40–60 neutral accumulation zone
+    # 50–65 strong continuation zone
+
+    if 45 <= latest_rsi <= 60:
+        return 3   # Strong signal
+    elif 40 <= latest_rsi < 45:
+        return 2
+    elif 60 < latest_rsi <= 65:
+        return 2
+    else:
+        return 0
