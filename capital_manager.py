@@ -1,10 +1,9 @@
-from core.storage import load_json, save_json
+def calculate_position_size(capital, risk_percent, entry, stop_loss):
+    risk_amount = capital * risk_percent
+    risk_per_share = abs(entry - stop_loss)
 
-CAPITAL_FILE = "data/capital.json"
+    if risk_per_share == 0:
+        return 0
 
-def load_capital(default_capital: float = 10000.0) -> float:
-    data = load_json(CAPITAL_FILE, {"capital": default_capital})
-    return float(data.get("capital", default_capital))
-
-def update_capital(new_capital: float) -> None:
-    save_json(CAPITAL_FILE, {"capital": float(new_capital)})
+    quantity = int(risk_amount / risk_per_share)
+    return max(quantity, 0)
