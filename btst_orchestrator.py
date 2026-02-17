@@ -1,122 +1,126 @@
-import yfinance as yf
 import pandas as pd
+import yfinance as yf
 from datetime import datetime
 
-from core.universe_manager import fetch_nifty200_dynamic
-from core.indicators import atr
-
+# Agent Imports
 from agents.regime_agent import market_regime
-from agents.rsi_agent import rsi_score
-from agents.consolidation_agent import consolidation_score
+from agents.rsi_agent import rsi_signal
 from agents.gap_agent import gap_probability_score
-from agents.liquidity_agent import liquidity_score
-from agents.voting_agent import combine_scores, DEFAULT_WEIGHTS
+from agents.consolidation_agent import consolidation_signal
 
-from core.utils import load_json, save_json
-from capital_manager import get_capital, position_size
+# Core Imports
+from capital_manager import get_capital, calculate_position_size
+from trade_manager import save_open_trade
+from telegram import send_message
 
 
-POLICY_PATH = "data/policy.json"
-
-def load_policy():
-    return load_json(POLICY_PATH, {"weights": DEFAULT_WEIGHTS})
-
-def save_policy(policy: dict):
-    save_json(POLICY_PATH, policy)
-
-def run_btst_agents(universe_limit: int = 120) -> dict:
+def run_btst_agents(universe, risk_percent=2):
     """
-    Returns dict with best pick and full explanation.
+    Main BTST AI Orchestrator
     """
-    print("\n========== BTST AI ENGINE ==========\n")
 
-    # Regime filter
+    print("🚀 Running BTST AI Engine...")
+    capital = get_capital()
+
+    print(f"Available Capital: ₹{capital}")
+    print(f"Risk Per Trade: {risk_percent}%")
+
+    selected_trade = None
+    highest_score = 0
+
+    # ---- MARKET REGIME CHECK ----
     regime = market_regime()
     print(f"Market Regime: {regime}")
+
     if regime != "BULLISH":
-        return {"status": "skipped", "reason": f"regime={regime}"}
+        print("Market not bullish. No BTST trades today.")
+        send_message("⚠ Market not bullish. No BTST trades today.")
+        return
 
-    policy = load_policy()
-    weights = policy.get("weights", DEFAULT_WEIGHTS)
+    # ---- SCAN UNIVERSE ----
+    for symbol in universe:
 
-    symbols = fetch_nifty200_dynamic(cache_path="data/nifty200.csv")
-    symbols = symbols[:universe_limit]
-
-    best = None
-    best_score = -1
-
-    for symbol in symbols:
         try:
-            df = yf.download(symbol, period="6mo", interval="1d", progress=False)
-            if df is None or df.empty or len(df) < 80:
+            data = yf.download(symbol, period="3mo", interval="1d", progress=False)
+
+            if len(data) < 50:
                 continue
 
-            # compute ATR for SL/Target later
-            df = df.dropna().copy()
-            df["ATR"] = atr(df, 14)
+            close = data["Close"]
+            latest_price = float(close.iloc[-1])
 
-            # agent scores (0..1)
-            scores = {
-                "rsi": rsi_score(df),
-                "consolidation": consolidation_score(df),
-                "gap": gap_probability_score(df),
-                "liquidity": liquidity_score(df),
-            }
+            # ---- AGENT SIGNALS ----
+            rsi_score = rsi_signal(data)
+            gap_score = gap_probability_score(data)
+            consolidation_score = consolidation_signal(data)
 
-            final_score, votes = combine_scores(scores, weights)
+            # Multi-Agent Voting System
+            total_score = rsi_score + gap_score + consolidation_score
 
-            # Hard guardrails: must have liquidity + RSI at least partially
-            if scores["liquidity"] <= 0.0:
-                continue
-            if scores["rsi"] <= 0.0:
-                continue
+            print(f"{symbol} | RSI:{rsi_score} GAP:{gap_score} CONS:{consolidation_score} TOTAL:{total_score}")
 
-            if final_score > best_score:
-                latest = df.iloc[-1]
-                best_score = final_score
-                best = {
+            if total_score > highest_score:
+                highest_score = total_score
+                selected_trade = {
                     "symbol": symbol,
-                    "final_score": round(final_score, 4),
-                    "scores": {k: round(float(v), 4) for k, v in scores.items()},
-                    "votes": votes,
-                    "close": float(latest["Close"]),
-                    "atr": float(latest["ATR"]) if pd.notna(latest["ATR"]) else None,
-                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "entry": latest_price,
+                    "score": total_score,
+                    "data": data
                 }
 
         except Exception as e:
-            print(f"Error on {symbol}: {e}")
+            print(f"Error processing {symbol}: {e}")
             continue
 
-    if not best:
-        return {"status": "no_pick"}
+    if not selected_trade:
+        print("No high probability BTST trade found.")
+        send_message("❌ No high probability BTST trade today.")
+        return
 
-    # Build trade plan
-    entry = best["close"]
-    atr_val = best["atr"] or (entry * 0.02)  # fallback 2%
-    stop_loss = entry - atr_val
-    target = entry + (atr_val * 1.8)
+    # ---- FINAL TRADE SELECTION ----
+    symbol = selected_trade["symbol"]
+    entry_price = selected_trade["entry"]
+    data = selected_trade["data"]
 
-    capital = get_capital(10000.0)
-    qty = position_size(capital=capital, risk_pct=0.01, entry=entry, stop=stop_loss)
+    # ATR-based SL & Target
+    atr = data["High"] - data["Low"]
+    atr_value = atr.rolling(14).mean().iloc[-1]
 
-    best.update({
-        "status": "picked",
-        "entry": round(entry, 2),
-        "stop_loss": round(stop_loss, 2),
-        "target": round(target, 2),
-        "quantity": int(qty),
-        "capital_used": round(entry * qty, 2)
-    })
+    sl = entry_price - atr_value
+    target = entry_price + (2 * atr_value)
 
-    # LOGS (as you asked)
-    print("\n✅ BTST Candidate Selected\n")
-    print(f"Selected: {best['symbol']}")
-    print(f"Entry: ₹{best['entry']}")
-    print(f"Stop Loss: ₹{best['stop_loss']}")
-    print(f"Target: ₹{best['target']}")
-    print(f"Position Size: {best['quantity']} shares")
-    print(f"Score: {best['final_score']} | Scores: {best['scores']} | Votes: {best['votes']}")
-    print("\n=====================================\n")
+    quantity = calculate_position_size(entry_price, risk_percent)
 
-    return best
+    print("\n🔥 FINAL BTST TRADE SELECTED 🔥")
+    print(f"Selected: {symbol}")
+    print(f"Entry: {entry_price}")
+    print(f"Stop Loss: {sl}")
+    print(f"Target: {target}")
+    print(f"Position Size: {quantity}")
+    print(f"Total Score: {highest_score}")
+
+    # Save trade
+    save_open_trade(
+        symbol=symbol,
+        entry=entry_price,
+        stop_loss=sl,
+        target=target,
+        quantity=quantity
+    )
+
+    # Telegram Signal
+    message = f"""
+📈 BTST AI Signal
+
+Stock: {symbol}
+Entry: ₹{round(entry_price,2)}
+Stop Loss: ₹{round(sl,2)}
+Target: ₹{round(target,2)}
+Quantity: {quantity}
+
+Confidence Score: {highest_score}
+"""
+
+    send_message(message)
+
+    print("✅ Signal Sent to Telegram")
