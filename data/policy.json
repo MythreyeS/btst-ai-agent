@@ -1,0 +1,14 @@
+{
+  "weights": {
+    "trend_50dma": 0.20,
+    "breakout_20": 0.20,
+    "vol_ratio": 0.20,
+    "mom_1d": 0.15,
+    "mom_5d": 0.10,
+    "close_near_high": 0.10,
+    "consolidating": 0.05
+  },
+  "threshold": 0.62,
+  "rsi_low": 50,
+  "rsi_high": 70
+}
