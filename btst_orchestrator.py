@@ -1,151 +1,122 @@
 import yfinance as yf
 import pandas as pd
-import numpy as np
 from datetime import datetime
+
+from core.universe_manager import fetch_nifty200_dynamic
+from core.indicators import atr
+
 from agents.regime_agent import market_regime
-from capital_manager import calculate_position_size
+from agents.rsi_agent import rsi_score
+from agents.consolidation_agent import consolidation_score
+from agents.gap_agent import gap_probability_score
+from agents.liquidity_agent import liquidity_score
+from agents.voting_agent import combine_scores, DEFAULT_WEIGHTS
+
+from core.utils import load_json, save_json
+from capital_manager import get_capital, position_size
 
 
-# =========================
-# CONFIGURATION
-# =========================
+POLICY_PATH = "data/policy.json"
 
-RISK_PER_TRADE = 0.01          # 1% capital risk
-MIN_VOLUME = 500000            # liquidity filter
-RSI_PERIOD = 14
-ATR_PERIOD = 14
-RR_RATIO = 1.8                 # Reward:Risk ratio
-CONSOLIDATION_DAYS = 10
+def load_policy():
+    return load_json(POLICY_PATH, {"weights": DEFAULT_WEIGHTS})
 
+def save_policy(policy: dict):
+    save_json(POLICY_PATH, policy)
 
-# =========================
-# INDICATOR FUNCTIONS
-# =========================
-
-def calculate_rsi(df, period=14):
-    delta = df['Close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
-
-
-def calculate_atr(df, period=14):
-    df['H-L'] = df['High'] - df['Low']
-    df['H-PC'] = abs(df['High'] - df['Close'].shift(1))
-    df['L-PC'] = abs(df['Low'] - df['Close'].shift(1))
-    tr = df[['H-L', 'H-PC', 'L-PC']].max(axis=1)
-    return tr.rolling(period).mean()
-
-
-def is_consolidating(df, days=10, threshold=0.03):
-    recent = df.tail(days)
-    max_close = recent['Close'].max()
-    min_close = recent['Close'].min()
-    return (max_close - min_close) / min_close < threshold
-
-
-def is_liquid(df):
-    return df['Volume'].iloc[-1] > MIN_VOLUME
-
-
-# =========================
-# MAIN ENGINE
-# =========================
-
-def run_btst(capital=10000):
-
+def run_btst_agents(universe_limit: int = 120) -> dict:
+    """
+    Returns dict with best pick and full explanation.
+    """
     print("\n========== BTST AI ENGINE ==========\n")
 
-    # Market Regime Check
-    if market_regime() != "BULLISH":
-        print("Market not bullish. Skipping BTST today.")
-        return None
+    # Regime filter
+    regime = market_regime()
+    print(f"Market Regime: {regime}")
+    if regime != "BULLISH":
+        return {"status": "skipped", "reason": f"regime={regime}"}
 
-    print("Market Regime: BULLISH\n")
+    policy = load_policy()
+    weights = policy.get("weights", DEFAULT_WEIGHTS)
 
-    # Example Nifty 200 universe (replace with dynamic loader later)
-    symbols = [
-        "RELIANCE.NS", "HDFCBANK.NS", "INFY.NS",
-        "ICICIBANK.NS", "LT.NS", "TCS.NS"
-    ]
+    symbols = fetch_nifty200_dynamic(cache_path="data/nifty200.csv")
+    symbols = symbols[:universe_limit]
 
-    best_pick = None
-    best_score = 0
+    best = None
+    best_score = -1
 
     for symbol in symbols:
         try:
-            df = yf.download(symbol, period="3mo", interval="1d", progress=False)
-
-            if len(df) < 50:
+            df = yf.download(symbol, period="6mo", interval="1d", progress=False)
+            if df is None or df.empty or len(df) < 80:
                 continue
 
-            # Indicators
-            df['RSI'] = calculate_rsi(df, RSI_PERIOD)
-            df['ATR'] = calculate_atr(df, ATR_PERIOD)
+            # compute ATR for SL/Target later
+            df = df.dropna().copy()
+            df["ATR"] = atr(df, 14)
 
-            latest = df.iloc[-1]
+            # agent scores (0..1)
+            scores = {
+                "rsi": rsi_score(df),
+                "consolidation": consolidation_score(df),
+                "gap": gap_probability_score(df),
+                "liquidity": liquidity_score(df),
+            }
 
-            # Filters
-            if not is_liquid(df):
+            final_score, votes = combine_scores(scores, weights)
+
+            # Hard guardrails: must have liquidity + RSI at least partially
+            if scores["liquidity"] <= 0.0:
+                continue
+            if scores["rsi"] <= 0.0:
                 continue
 
-            if latest['RSI'] < 55:
-                continue
-
-            if not is_consolidating(df, CONSOLIDATION_DAYS):
-                continue
-
-            # Score logic
-            score = latest['RSI']
-
-            if score > best_score:
-                best_score = score
-                best_pick = (symbol, latest)
+            if final_score > best_score:
+                latest = df.iloc[-1]
+                best_score = final_score
+                best = {
+                    "symbol": symbol,
+                    "final_score": round(final_score, 4),
+                    "scores": {k: round(float(v), 4) for k, v in scores.items()},
+                    "votes": votes,
+                    "close": float(latest["Close"]),
+                    "atr": float(latest["ATR"]) if pd.notna(latest["ATR"]) else None,
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                }
 
         except Exception as e:
-            print(f"Error processing {symbol}: {e}")
+            print(f"Error on {symbol}: {e}")
             continue
 
-    if not best_pick:
-        print("No suitable BTST candidate found.")
-        return None
+    if not best:
+        return {"status": "no_pick"}
 
-    symbol, latest = best_pick
+    # Build trade plan
+    entry = best["close"]
+    atr_val = best["atr"] or (entry * 0.02)  # fallback 2%
+    stop_loss = entry - atr_val
+    target = entry + (atr_val * 1.8)
 
-    entry_price = latest['Close']
-    atr = latest['ATR']
+    capital = get_capital(10000.0)
+    qty = position_size(capital=capital, risk_pct=0.01, entry=entry, stop=stop_loss)
 
-    sl = entry_price - atr
-    target = entry_price + (atr * RR_RATIO)
+    best.update({
+        "status": "picked",
+        "entry": round(entry, 2),
+        "stop_loss": round(stop_loss, 2),
+        "target": round(target, 2),
+        "quantity": int(qty),
+        "capital_used": round(entry * qty, 2)
+    })
 
-    quantity = calculate_position_size(
-        capital=capital,
-        risk_percent=RISK_PER_TRADE,
-        entry=entry_price,
-        stop_loss=sl
-    )
-
-    # =========================
-    # LOG OUTPUT (IMPORTANT)
-    # =========================
-
-    print("✅ BTST Candidate Selected\n")
-    print(f"Selected: {symbol}")
-    print(f"Entry: ₹{round(entry_price,2)}")
-    print(f"Stop Loss: ₹{round(sl,2)}")
-    print(f"Target: ₹{round(target,2)}")
-    print(f"ATR: ₹{round(atr,2)}")
-    print(f"Position Size: {quantity} shares")
-    print(f"Capital Used: ₹{round(quantity * entry_price,2)}")
+    # LOGS (as you asked)
+    print("\n✅ BTST Candidate Selected\n")
+    print(f"Selected: {best['symbol']}")
+    print(f"Entry: ₹{best['entry']}")
+    print(f"Stop Loss: ₹{best['stop_loss']}")
+    print(f"Target: ₹{best['target']}")
+    print(f"Position Size: {best['quantity']} shares")
+    print(f"Score: {best['final_score']} | Scores: {best['scores']} | Votes: {best['votes']}")
     print("\n=====================================\n")
 
-    return {
-        "symbol": symbol,
-        "entry": round(entry_price,2),
-        "stop_loss": round(sl,2),
-        "target": round(target,2),
-        "quantity": quantity,
-        "capital_used": round(quantity * entry_price,2),
-        "date": datetime.now().strftime("%Y-%m-%d")
-    }
+    return best
