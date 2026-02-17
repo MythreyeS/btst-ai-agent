@@ -1,16 +1,75 @@
+import json
 import os
-from core.storage import load_json, save_json
+from datetime import datetime
 
-OPEN_TRADE_FILE = "data/open_trade.json"
+TRADES_FILE = "data/open_trade.json"
 
-def save_trade(trade: dict) -> None:
-    save_json(OPEN_TRADE_FILE, trade)
 
-def load_trade():
-    trade = load_json(OPEN_TRADE_FILE, {})
-    if not trade or "symbol" not in trade:
+def initialize_trade_file():
+    os.makedirs("data", exist_ok=True)
+
+    if not os.path.exists(TRADES_FILE):
+        with open(TRADES_FILE, "w") as f:
+            json.dump({}, f)
+
+
+def has_open_trade():
+    initialize_trade_file()
+
+    with open(TRADES_FILE, "r") as f:
+        data = json.load(f)
+
+    return bool(data)
+
+
+def save_open_trade(symbol, entry_price, sl, target, quantity):
+    trade = {
+        "symbol": symbol,
+        "entry_price": entry_price,
+        "stop_loss": sl,
+        "target": target,
+        "quantity": quantity,
+        "entry_date": str(datetime.today().date())
+    }
+
+    with open(TRADES_FILE, "w") as f:
+        json.dump(trade, f)
+
+    print(f"Trade saved: {trade}")
+
+
+def close_trade_if_due(current_price):
+    initialize_trade_file()
+
+    with open(TRADES_FILE, "r") as f:
+        trade = json.load(f)
+
+    if not trade:
         return None
-    return trade
 
-def clear_trade():
-    save_json(OPEN_TRADE_FILE, {})
+    entry = trade["entry_price"]
+    sl = trade["stop_loss"]
+    target = trade["target"]
+    qty = trade["quantity"]
+
+    pnl = 0
+    closed = False
+
+    if current_price <= sl:
+        pnl = (sl - entry) * qty
+        closed = True
+
+    elif current_price >= target:
+        pnl = (target - entry) * qty
+        closed = True
+
+    if closed:
+        print(f"Trade closed. PnL: {pnl}")
+
+        # clear trade
+        with open(TRADES_FILE, "w") as f:
+            json.dump({}, f)
+
+        return pnl
+
+    return None
