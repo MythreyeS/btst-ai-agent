@@ -1,1 +1,6 @@
-{"capital": 10000}
+{
+  "initial_capital": 10000,
+  "current_capital": 10000,
+  "weekly_target": 20000,
+  "risk_per_trade": 0.02
+}
