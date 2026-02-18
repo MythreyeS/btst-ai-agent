@@ -1,37 +1,56 @@
 from agents.regime_agent import market_regime
 from agents.rsi_agent import rsi_signal
 from agents.consolidation_agent import consolidation_signal
+from agents.gap_agent import gap_probability
+from agents.atr_agent import atr_levels
+from capital_manager import get_capital, calculate_position_size
 
 def run_btst_agents(universe):
 
-    print("Running BTST AI Engine...")
+    print("🚀 Running BTST AI Engine...")
 
     regime = market_regime()
 
     if regime != "BULLISH":
-        print("Market not bullish. Skipping BTST.")
+        print("Market not bullish.")
         return None
 
-    scores = []
+    capital = get_capital()
+    risk_percent = 0.02
 
-    for symbol in universe[:50]:  # limit for speed
+    print(f"Available Capital: ₹{capital}")
+    print(f"Risk Per Trade: {risk_percent*100}%")
+
+    candidates = []
+
+    for symbol in universe[:80]:
 
         score = 0
-
         score += rsi_signal(symbol)
         score += consolidation_signal(symbol)
+        score += gap_probability(symbol)
 
         if score >= 2:
-            scores.append((symbol, score))
+            candidates.append(symbol)
 
-    if not scores:
-        print("No strong BTST candidates.")
+    if not candidates:
         return None
 
-    scores.sort(key=lambda x: x[1], reverse=True)
+    best = candidates[0]
 
-    best_pick = scores[0][0]
+    entry, stop, target = atr_levels(best)
+    qty = calculate_position_size(capital, risk_percent, entry, stop)
 
-    print(f"Selected Stock: {best_pick}")
+    print(f"Selected: {best}")
+    print(f"Entry: {entry}")
+    print(f"Stop: {stop}")
+    print(f"Target: {target}")
+    print(f"Quantity: {qty}")
 
-    return best_pick
+    return {
+        "symbol": best,
+        "entry": entry,
+        "stop": stop,
+        "target": target,
+        "qty": qty
+    }
