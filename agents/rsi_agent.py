@@ -1,49 +1,30 @@
+import yfinance as yf
 import pandas as pd
-import ta
 
+def calculate_rsi(series, period=14):
+    delta = series.diff()
+    gain = delta.clip(lower=0)
+    loss = -1 * delta.clip(upper=0)
 
-# ==========================================================
-# RSI AGENT
-# Used for:
-# - Live BTST decision
-# - Backtesting engine
-# - Multi-agent voting system
-# ==========================================================
+    avg_gain = gain.rolling(period).mean()
+    avg_loss = loss.rolling(period).mean()
 
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
 
-def rsi_signal(data: pd.DataFrame, period: int = 14) -> int:
-    """
-    Returns:
-        1 -> Bullish
-        0 -> Neutral / Bearish
-    """
-
-    if data is None or len(data) < period + 2:
-        return 0
-
+def rsi_signal(symbol):
     try:
-        close = data["Close"]
+        data = yf.download(symbol, period="3mo", interval="1d", progress=False)
 
-        rsi_indicator = ta.momentum.RSIIndicator(close, window=period)
-        rsi_series = rsi_indicator.rsi()
+        rsi = calculate_rsi(data["Close"])
 
-        latest_rsi = rsi_series.iloc[-1]
+        latest_rsi = float(rsi.iloc[-1])
 
-        # BTST bullish bias logic
-        if latest_rsi > 55:
+        if latest_rsi > 55 and latest_rsi < 70:
             return 1
         else:
             return 0
 
-    except Exception as e:
-        print(f"[RSI AGENT ERROR]: {e}")
+    except:
         return 0
-
-
-# ==========================================================
-# BACKWARD COMPATIBILITY
-# Some files import rsi_score instead of rsi_signal
-# ==========================================================
-
-def rsi_score(data: pd.DataFrame) -> int:
-    return rsi_signal(data)
