@@ -1,18 +1,30 @@
-from core.utils import load_json, save_json
+import json
+import os
 
-CAPITAL_PATH = "data/capital.json"
+CAPITAL_FILE = "data/capital.json"
 
-def get_capital(default_capital: float = 10000.0) -> float:
-    data = load_json(CAPITAL_PATH, {"capital": default_capital})
-    return float(data.get("capital", default_capital))
+def initialize_capital():
+    if not os.path.exists("data"):
+        os.makedirs("data")
 
-def set_capital(value: float) -> None:
-    save_json(CAPITAL_PATH, {"capital": float(value)})
+    if not os.path.exists(CAPITAL_FILE):
+        with open(CAPITAL_FILE, "w") as f:
+            json.dump({"current_capital": 10000}, f)
 
-def position_size(capital: float, risk_pct: float, entry: float, stop: float) -> int:
-    risk_amt = capital * risk_pct
-    risk_per_share = abs(entry - stop)
-    if risk_per_share <= 0:
+def get_capital():
+    initialize_capital()
+    with open(CAPITAL_FILE, "r") as f:
+        data = json.load(f)
+    return data["current_capital"]
+
+def update_capital(new_value):
+    with open(CAPITAL_FILE, "w") as f:
+        json.dump({"current_capital": new_value}, f)
+
+def calculate_position_size(capital, risk_percent, entry, stop):
+    risk_amount = capital * risk_percent
+    per_share_risk = abs(entry - stop)
+    if per_share_risk == 0:
         return 0
-    qty = int(risk_amt / risk_per_share)
-    return max(qty, 0)
+    quantity = int(risk_amount / per_share_risk)
+    return quantity
