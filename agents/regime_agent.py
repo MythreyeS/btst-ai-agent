@@ -2,18 +2,23 @@ import yfinance as yf
 import pandas as pd
 
 def market_regime():
-    symbol = "^NSEI"  # Nifty 50
+    symbol = "^NSEI"
 
-    df = yf.download(symbol, period="6mo", interval="1d")
+    df = yf.download(symbol, period="6mo", interval="1d", auto_adjust=True)
 
     if df.empty:
         return "neutral"
 
-    df["SMA50"] = df["Close"].rolling(50).mean()
+    # Ensure Close is a proper Series
+    close_series = df["Close"]
 
-    # get last row safely as scalar
-    last_close = df["Close"].iloc[-1]
-    last_sma50 = df["SMA50"].iloc[-1]
+    if isinstance(close_series, pd.DataFrame):
+        close_series = close_series.iloc[:, 0]
+
+    df["SMA50"] = close_series.rolling(50).mean()
+
+    last_close = float(close_series.iloc[-1])
+    last_sma50 = float(df["SMA50"].iloc[-1])
 
     if pd.isna(last_sma50):
         return "neutral"
