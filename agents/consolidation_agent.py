@@ -1,11 +1,10 @@
 import yfinance as yf
-import pandas as pd
 
 
 def consolidation_score(symbol, lookback=20):
     """
-    Returns a consolidation score between 0 and 1
-    Higher score = tighter range (good for breakout setups)
+    Returns a numeric score (0 to 1)
+    Higher score = tighter range
     """
 
     try:
@@ -21,7 +20,6 @@ def consolidation_score(symbol, lookback=20):
 
         range_pct = (high - low) / low
 
-        # Smaller range = stronger consolidation
         if range_pct < 0.03:
             return 1.0
         elif range_pct < 0.05:
@@ -34,3 +32,17 @@ def consolidation_score(symbol, lookback=20):
     except Exception as e:
         print(f"Consolidation error for {symbol}: {e}")
         return 0
+
+
+def consolidation_signal(symbol):
+    """
+    Returns True if strong consolidation exists
+    Used by orchestrator for voting
+    """
+
+    score = consolidation_score(symbol)
+
+    if score >= 0.8:
+        return True
+    else:
+        return False
