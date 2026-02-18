@@ -1,45 +1,49 @@
 import pandas as pd
-import numpy as np
+import ta
 
 
-def calculate_rsi(data, period=14):
-    delta = data["Close"].diff()
-
-    gain = np.where(delta > 0, delta, 0)
-    loss = np.where(delta < 0, -delta, 0)
-
-    avg_gain = pd.Series(gain).rolling(period).mean()
-    avg_loss = pd.Series(loss).rolling(period).mean()
-
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-
-    return rsi
+# ==========================================================
+# RSI AGENT
+# Used for:
+# - Live BTST decision
+# - Backtesting engine
+# - Multi-agent voting system
+# ==========================================================
 
 
-def rsi_signal(data):
+def rsi_signal(data: pd.DataFrame, period: int = 14) -> int:
     """
-    Returns BTST signal score based on RSI.
+    Returns:
+        1 -> Bullish
+        0 -> Neutral / Bearish
     """
 
-    if len(data) < 20:
+    if data is None or len(data) < period + 2:
         return 0
 
-    rsi = calculate_rsi(data)
-    latest_rsi = rsi.iloc[-1]
+    try:
+        close = data["Close"]
 
-    # Strong momentum zone
-    if 55 <= latest_rsi <= 70:
-        return 3
+        rsi_indicator = ta.momentum.RSIIndicator(close, window=period)
+        rsi_series = rsi_indicator.rsi()
 
-    # Mild bullish
-    elif 50 <= latest_rsi < 55:
-        return 2
+        latest_rsi = rsi_series.iloc[-1]
 
-    # Neutral
-    elif 45 <= latest_rsi < 50:
-        return 1
+        # BTST bullish bias logic
+        if latest_rsi > 55:
+            return 1
+        else:
+            return 0
 
-    # Weak / avoid
-    else:
+    except Exception as e:
+        print(f"[RSI AGENT ERROR]: {e}")
         return 0
+
+
+# ==========================================================
+# BACKWARD COMPATIBILITY
+# Some files import rsi_score instead of rsi_signal
+# ==========================================================
+
+def rsi_score(data: pd.DataFrame) -> int:
+    return rsi_signal(data)
