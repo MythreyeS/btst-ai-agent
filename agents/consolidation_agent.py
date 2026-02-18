@@ -1,33 +1,36 @@
-import numpy as np
+import yfinance as yf
+import pandas as pd
 
 
-def consolidation_signal(data, lookback=10, threshold=0.04):
+def consolidation_score(symbol, lookback=20):
     """
-    Detects price consolidation phase.
-
-    Returns:
-        3 -> Strong consolidation (tight range)
-        2 -> Moderate consolidation
-        0 -> No consolidation
+    Returns a consolidation score between 0 and 1
+    Higher score = tighter range (good for breakout setups)
     """
 
-    if len(data) < lookback:
-        return 0
+    try:
+        data = yf.download(symbol, period="3mo", progress=False)
 
-    recent = data.tail(lookback)
+        if len(data) < lookback:
+            return 0
 
-    highest = recent["High"].max()
-    lowest = recent["Low"].min()
+        recent = data.tail(lookback)
 
-    range_pct = (highest - lowest) / lowest
+        high = recent["High"].max()
+        low = recent["Low"].min()
 
-    # 🔥 Tight consolidation (very strong breakout setup)
-    if range_pct < threshold:
-        return 3
+        range_pct = (high - low) / low
 
-    # Moderate consolidation
-    elif range_pct < threshold * 1.5:
-        return 2
+        # Smaller range = stronger consolidation
+        if range_pct < 0.03:
+            return 1.0
+        elif range_pct < 0.05:
+            return 0.8
+        elif range_pct < 0.08:
+            return 0.5
+        else:
+            return 0.2
 
-    else:
+    except Exception as e:
+        print(f"Consolidation error for {symbol}: {e}")
         return 0
