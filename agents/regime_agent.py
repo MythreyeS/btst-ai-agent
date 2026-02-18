@@ -2,28 +2,25 @@ import yfinance as yf
 import pandas as pd
 
 def market_regime():
-    symbol = "^NSEI"
+    """
+    Market regime using NIFTY index and 50 SMA
+    """
 
-    df = yf.download(symbol, period="6mo", interval="1d", auto_adjust=True)
+    print("Checking market regime...")
 
-    if df.empty:
-        return "neutral"
+    data = yf.download("^NSEI", period="6mo", interval="1d", progress=False)
 
-    # Ensure Close is a proper Series
-    close_series = df["Close"]
+    data["SMA50"] = data["Close"].rolling(50).mean()
 
-    if isinstance(close_series, pd.DataFrame):
-        close_series = close_series.iloc[:, 0]
+    last_close = float(data["Close"].iloc[-1])
+    last_sma50 = float(data["SMA50"].iloc[-1])
 
-    df["SMA50"] = close_series.rolling(50).mean()
-
-    last_close = float(close_series.iloc[-1])
-    last_sma50 = float(df["SMA50"].iloc[-1])
-
-    if pd.isna(last_sma50):
-        return "neutral"
+    print(f"Nifty Close: {last_close}")
+    print(f"Nifty SMA50: {last_sma50}")
 
     if last_close > last_sma50:
-        return "bullish"
+        print("Market Regime: BULLISH")
+        return "BULLISH"
     else:
-        return "bearish"
+        print("Market Regime: BEARISH")
+        return "BEARISH"
