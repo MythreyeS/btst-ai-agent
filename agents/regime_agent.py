@@ -28,3 +28,8 @@ def get_market_regime():
         regime = "NEUTRAL"
 
     return regime, close, sma20
+
+def market_regime():
+    regime, close, sma20 = get_market_regime()
+    return regime
+
