@@ -1,26 +1,30 @@
 import yfinance as yf
 import pandas as pd
 
-def market_regime():
-    """
-    Market regime using NIFTY index and 50 SMA
-    """
 
-    print("Checking market regime...")
+def get_market_regime():
+    symbol = "^NSEI"  # Nifty 50
 
-    data = yf.download("^NSEI", period="6mo", interval="1d", progress=False)
+    data = yf.download(symbol, period="3mo", interval="1d", progress=False)
 
-    data["SMA50"] = data["Close"].rolling(50).mean()
+    if data.empty:
+        return "UNKNOWN", 0, 0
 
-    last_close = float(data["Close"].iloc[-1])
-    last_sma50 = float(data["SMA50"].iloc[-1])
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = data.columns.get_level_values(0)
 
-    print(f"Nifty Close: {last_close}")
-    print(f"Nifty SMA50: {last_sma50}")
+    close = float(data["Close"].iloc[-1])
+    sma20 = float(data["Close"].rolling(20).mean().iloc[-1])
 
-    if last_close > last_sma50:
-        print("Market Regime: BULLISH")
-        return "BULLISH"
+    threshold = 0.003  # 0.3%
+
+    diff = (close - sma20) / sma20
+
+    if diff > 0.002:  # 0.2% above SMA
+        regime = "BULLISH"
+    elif diff < -threshold:
+        regime = "BEARISH"
     else:
-        print("Market Regime: BEARISH")
-        return "BEARISH"
+        regime = "NEUTRAL"
+
+    return regime, close, sma20
