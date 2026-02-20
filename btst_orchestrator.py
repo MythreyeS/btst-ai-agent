@@ -1,158 +1,121 @@
-import traceback
+import requests
 from datetime import datetime
 
-from agents.regime_agent import get_market_regime
-from agents.strategy_agent import load_policy, pick_best
-from agents.voting_agent import combine_scores, DEFAULT_WEIGHTS
-from core.universe_manager import fetch_nifty200_dynamic
-from telegram import send_telegram
+TELEGRAM_TOKEN = "YOUR_BOT_TOKEN"
+TELEGRAM_CHAT_ID = "YOUR_CHAT_ID"
 
 
-# -------------------------------------------------
-# Feature Builder (Minimal Stable Version)
-# -------------------------------------------------
+def regime_emoji(regime):
+    mapping = {
+        "BULLISH": "🟢",
+        "BEARISH": "🔴",
+        "NEUTRAL": "🟡"
+    }
+    return mapping.get(regime.upper(), "⚪")
 
-def build_features(symbol: str) -> dict:
-    """
-    Temporary deterministic feature builder.
-    Replace later with real Yahoo feature extractor.
-    """
 
-    return {
-        "symbol": symbol,
-        "trend_50dma": 1,
-        "breakout_20": 1,
-        "vol_ratio": 1.2,
-        "mom_1d": 0.01,
-        "mom_5d": 0.02,
-        "close_near_high": 1,
-        "consolidating": 0,
-        "liquid": 1,
-        "rsi": 60,
-        "strong_close": 1,
+def calculate_confidence(score):
+    return round(score, 1)
+
+
+def calculate_expected_risk(volatility):
+    return round(volatility * 100, 2)
+
+
+def calculate_entry_zone(entry_price, atr):
+    lower = round(entry_price - (0.3 * atr), 2)
+    upper = round(entry_price + (0.3 * atr), 2)
+    return lower, upper
+
+
+def calculate_distance_from_zone(current_price, lower, upper):
+    if lower <= current_price <= upper:
+        return "Inside Entry Zone ✅"
+    elif current_price > upper:
+        diff = ((current_price - upper) / upper) * 100
+        return f"+{round(diff,2)}% Above Zone ⚠"
+    else:
+        diff = ((lower - current_price) / lower) * 100
+        return f"-{round(diff,2)}% Below Zone ⚠"
+
+
+def build_consensus_summary(stock):
+    votes = stock.get("votes", {})
+    total = len(votes)
+    aligned = sum(votes.values())
+    return f"{aligned}/{total} AI signals aligned"
+
+
+def format_trade_message(index, close, sma, regime, capital, selected_stocks):
+
+    emoji = regime_emoji(regime)
+    date_str = datetime.now().strftime("%d %b %Y")
+
+    message = f"""📊 *BTST AI Engine – Trade Alert*
+🗓 {date_str}
+
+Index: {index}
+Close: {close}
+SMA20: {sma}
+Regime: {emoji} {regime}
+
+💰 Total Capital: ₹{capital}
+"""
+
+    if not selected_stocks:
+        message += "\n⚠ No qualifying setups today."
+        return message
+
+    allocation = round(capital / len(selected_stocks), 2)
+
+    message += "\n\n🎯 *Selected Stocks*"
+
+    for i, stock in enumerate(selected_stocks, start=1):
+
+        symbol = stock["symbol"]
+        score = stock["final_score"]
+        confidence = calculate_confidence(score)
+
+        current_price = stock.get("current_price", 0)
+        entry_price = stock.get("entry_price", current_price)
+        atr = stock.get("atr", 10)
+        volatility = stock.get("volatility", 0.02)
+
+        lower, upper = calculate_entry_zone(entry_price, atr)
+        risk = calculate_expected_risk(volatility)
+        consensus = build_consensus_summary(stock)
+        distance = calculate_distance_from_zone(current_price, lower, upper)
+
+        message += f"""
+
+{i}. *{symbol}*
+   💵 Allocation: ₹{allocation}
+   📈 Current Price: ₹{current_price}
+   📍 Entry Zone: {lower} – {upper}
+   📊 Status: {distance}
+   🎯 Confidence: {confidence}%
+   ⚠ Expected Risk: {risk}%
+   🤖 AI Consensus: {consensus}
+"""
+
+    message += "\n\n— Powered by BTST Agentic AI"
+
+    return message
+
+
+def send_btst_alert(index, close, sma, regime, capital, selected_stocks):
+
+    message = format_trade_message(
+        index, close, sma, regime, capital, selected_stocks
+    )
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
     }
 
-
-# -------------------------------------------------
-# Agent Pipeline
-# -------------------------------------------------
-
-def run_btst_agents():
-
-    symbols = fetch_nifty200_dynamic()
-
-    candidates = []
-    policy = load_policy()
-
-    for sym in symbols[:25]:  # limit for GitHub speed
-
-        features = build_features(sym)
-
-        strategy_score = pick_best([features], policy)
-
-        if strategy_score is None:
-            continue
-
-        # Voting layer expects scores dict
-        scores = {
-            "rsi": 0.7,
-            "consolidation": 0.6,
-            "gap": 0.65,
-            "liquidity": 0.8,
-        }
-
-        final_score, votes = combine_scores(scores, DEFAULT_WEIGHTS)
-
-        if final_score >= 0.6:
-            strategy_score["final_score"] = round(final_score * 100, 2)
-            strategy_score["votes"] = votes
-            candidates.append(strategy_score)
-
-    candidates.sort(key=lambda x: x["final_score"], reverse=True)
-
-    return candidates[:3]
-
-
-# -------------------------------------------------
-# Telegram Formatter
-# -------------------------------------------------
-
-def format_trade_message(regime, close, sma20, picks):
-
-    header = f"""
-📊 BTST AI Engine – Trade Alert
-
-Index: NIFTY 50
-Close: {close:.2f}
-SMA20: {sma20:.2f}
-Regime: {regime}
-"""
-
-    if not picks:
-        return header + "\n\n❌ No Valid BTST Setups Today.\nCapital Protected."
-
-    body = "\n\n🎯 Selected Stocks:\n"
-
-    for stock in picks:
-        body += f"""
-• {stock['symbol']}
-  Conviction: {stock['final_score']}%
-  RSI: {stock['rsi']}
-"""
-
-    return header + body
-
-
-# -------------------------------------------------
-# MAIN
-# -------------------------------------------------
-
-def main():
-
-    try:
-
-        print("🚀 Running BTST AI Engine...")
-
-        regime_data = get_market_regime()
-        regime = regime_data["regime"]
-        close = regime_data["close"]
-        sma20 = regime_data["sma20"]
-
-        if regime == "BEARISH":
-
-            message = f"""
-📊 BTST AI Engine – Daily Report
-
-Index: NIFTY 50
-Close: {close:.2f}
-SMA20: {sma20:.2f}
-Regime: 🔴 BEARISH
-
-❌ No Trade Today.
-Capital Protected.
-"""
-            send_telegram(message)
-            return
-
-        picks = run_btst_agents()
-
-        message = format_trade_message(regime, close, sma20, picks)
-
-        send_telegram(message)
-
-        print("✅ Telegram Sent Successfully")
-
-    except Exception as e:
-
-        error_message = f"""
-⚠️ BTST Engine Error
-Time: {datetime.now()}
-Error: {str(e)}
-"""
-
-        send_telegram(error_message)
-        print(traceback.format_exc())
-
-
-if __name__ == "__main__":
-    main()
+    response = requests.post(url, json=payload)
+    return response.json()
