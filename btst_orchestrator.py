@@ -1,56 +1,87 @@
-from agents.regime_agent import market_regime
-from agents.rsi_agent import rsi_signal
-from agents.consolidation_agent import consolidation_signal
-from agents.gap_agent import gap_probability
-from agents.atr_agent import atr_levels
-from capital_manager import get_capital, calculate_position_size
+import traceback
+from datetime import datetime
 
-def run_btst_agents(universe):
+from agents.regime_agent import get_market_regime
+from agents.strategy_agent import generate_btst_candidates
+from agents.voting_agent import vote_on_stocks
+from capital_manager import get_available_capital
+from telegram import send_telegram
 
-    print("🚀 Running BTST AI Engine...")
 
-    regime = market_regime()
+def format_trade_message(regime, close_price, sma20, picks):
+    header = f"""📊 BTST AI Engine – Daily Report
 
-    if regime != "BULLISH":
-        print("Market not bullish.")
-        return None
+Index: NIFTY 50
+Close: {close_price}
+SMA20: {sma20}
+Regime: {regime}
+"""
 
-    capital = get_capital()
-    risk_percent = 0.02
+    if not picks:
+        body = "\n❌ No Trade Today.\nCapital Protected."
+        return header + body
 
-    print(f"Available Capital: ₹{capital}")
-    print(f"Risk Per Trade: {risk_percent*100}%")
+    body = "\n🔥 BTST Picks:\n"
+    for stock in picks:
+        body += f"""
+➡ {stock['symbol']}
+Entry: {stock['entry']}
+Target: {stock['target']}
+Stop: {stock['stop']}
+Conviction: {stock['score']}/100
+"""
 
-    candidates = []
+    return header + body
 
-    for symbol in universe[:80]:
 
-        score = 0
-        score += rsi_signal(symbol)
-        score += consolidation_signal(symbol)
-        score += gap_probability(symbol)
+def main():
+    try:
+        print("🚀 Starting BTST Orchestrator")
 
-        if score >= 2:
-            candidates.append(symbol)
+        # 1️⃣ Get market regime
+        regime_data = get_market_regime()
+        regime = regime_data["regime"]
+        close_price = regime_data["close"]
+        sma20 = regime_data["sma20"]
 
-    if not candidates:
-        return None
+        print("Market Regime:", regime)
 
-    best = candidates[0]
+        # 2️⃣ If market not bullish → still send message
+        if regime != "BULLISH":
+            message = format_trade_message(regime, close_price, sma20, [])
+            send_telegram(message)
+            print("📤 Sent no-trade message")
+            return
 
-    entry, stop, target = atr_levels(best)
-    qty = calculate_position_size(capital, risk_percent, entry, stop)
+        # 3️⃣ Generate candidates
+        candidates = generate_btst_candidates()
+        print("Candidates:", candidates)
 
-    print(f"Selected: {best}")
-    print(f"Entry: {entry}")
-    print(f"Stop: {stop}")
-    print(f"Target: {target}")
-    print(f"Quantity: {qty}")
+        # 4️⃣ Voting system
+        final_picks = vote_on_stocks(candidates)
+        print("Final Picks:", final_picks)
 
-    return {
-        "symbol": best,
-        "entry": entry,
-        "stop": stop,
-        "target": target,
-        "qty": qty
-    }
+        # 5️⃣ Capital allocation logic
+        capital = get_available_capital()
+        print("Available Capital:", capital)
+
+        message = format_trade_message(regime, close_price, sma20, final_picks)
+
+        # 6️⃣ ALWAYS SEND TELEGRAM
+        send_telegram(message)
+        print("📤 Telegram message sent successfully")
+
+    except Exception as e:
+        print("❌ Error in BTST Orchestrator")
+        print(traceback.format_exc())
+
+        error_message = f"""
+⚠️ BTST Engine Error
+Time: {datetime.now()}
+Error: {str(e)}
+"""
+        send_telegram(error_message)
+
+
+if __name__ == "__main__":
+    main()
