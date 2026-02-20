@@ -3,8 +3,11 @@ name: BTST AI Advisor
 on:
   workflow_dispatch:
   schedule:
-    - cron: '50 9 * * 1-5'    # 3:20 PM IST
-    - cron: '10 10 * * 1-5'   # 3:40 PM IST
+    # 3:20 PM IST → 09:50 UTC
+    - cron: '50 9 * * 1-5'
+
+    # 3:40 PM IST → 10:10 UTC
+    - cron: '10 10 * * 1-5'
 
 jobs:
   btst-engine:
@@ -24,9 +27,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run BTST Orchestrator
+      - name: Run BTST Engine
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          python btst_orchestrator.py
+          python main.py
