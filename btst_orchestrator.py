@@ -2,37 +2,42 @@ import traceback
 from datetime import datetime
 
 from agents.regime_agent import get_market_regime
-from agents.strategy_agent import generate_btst_candidates
-from agents.voting_agent import combine_scores, DEFAULT_WEIGHTS
+from agents.strategy_agent import load_policy, pick_best
+from core.universe_manager import fetch_nifty200_dynamic
 from telegram import send_telegram
 
 
 def run_btst_agents():
 
-    candidates = generate_btst_candidates()
+    symbols = fetch_nifty200_dynamic()
 
-    final_picks = []
+    # 🔥 TEMP: fake minimal feature set for now
+    # (Replace later with real feature builder)
+    candidates = []
 
-    for stock in candidates:
+    for sym in symbols[:20]:  # limit first 20 to avoid timeout
+        features = {
+            "symbol": sym,
+            "trend_50dma": 1,
+            "breakout_20": 1,
+            "vol_ratio": 1.2,
+            "mom_1d": 0.01,
+            "mom_5d": 0.02,
+            "close_near_high": 1,
+            "consolidating": 0,
+            "liquid": 1,
+            "rsi": 60,
+            "strong_close": 1
+        }
+        candidates.append(features)
 
-        # Expecting stock["agent_scores"] like:
-        # {"rsi":0.7,"gap":0.6,"liquidity":0.8,"consolidation":0.5}
-        scores = stock.get("agent_scores", {})
+    policy = load_policy()
+    best = pick_best(candidates, policy)
 
-        if not scores:
-            continue
+    if not best:
+        return []
 
-        final_score, votes = combine_scores(scores, DEFAULT_WEIGHTS)
-
-        if final_score >= 0.6:   # threshold
-            stock["final_score"] = round(final_score * 100, 2)
-            stock["votes"] = votes
-            final_picks.append(stock)
-
-    # sort highest conviction first
-    final_picks.sort(key=lambda x: x["final_score"], reverse=True)
-
-    return final_picks[:3]  # top 3
+    return [best]
 
 
 def main():
@@ -61,15 +66,15 @@ Capital Protected.
             send_telegram(message)
             return
 
-        selected_stocks = run_btst_agents()
+        selected = run_btst_agents()
 
-        if not selected_stocks:
+        if not selected:
             send_telegram("No valid BTST setups today.")
             return
 
         body = ""
-        for stock in selected_stocks:
-            body += f"\n• {stock['symbol']}  | Conviction: {stock['final_score']}%\n"
+        for stock in selected:
+            body += f"\n• {stock['symbol']} | Score: {round(stock['agent_score']*100,2)}%"
 
         message = f"""
 📊 BTST AI Engine – Trade Alert
@@ -79,7 +84,7 @@ Close: {close:.2f}
 SMA20: {sma20:.2f}
 Regime: {regime}
 
-🎯 Selected Stocks:
+🎯 Selected Stock:
 {body}
 """
 
