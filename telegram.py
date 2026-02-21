@@ -1,8 +1,12 @@
 import requests
 from datetime import datetime
 
-TELEGRAM_TOKEN = "YOUR_BOT_TOKEN"
+# 🔴 PASTE YOUR REAL TOKEN HERE
+TELEGRAM_TOKEN = "8376092514:AAH9eCBiPYtjfupuN5CjziZZU9PoXNDzZh4"
+
+# 🔴 YOUR CHAT ID (from getUpdates)
 TELEGRAM_CHAT_ID = "6278230258"
+
 
 def regime_emoji(regime):
     return {
@@ -10,6 +14,7 @@ def regime_emoji(regime):
         "BEARISH": "🔴",
         "NEUTRAL": "🟡"
     }.get(regime, "⚪")
+
 
 def format_message(index, close, sma, regime, capital, stocks):
 
@@ -24,11 +29,11 @@ Close: {close}
 SMA20: {sma}
 Regime: {emoji} {regime}
 
-💰 Capital: ₹{capital}
+💰 Total Capital: ₹{capital}
 """
 
     if not stocks:
-        message += "\n⚠ No qualifying setups today."
+        message += "\n\n⚠ No qualifying setups today."
         return message
 
     allocation = round(capital / len(stocks), 2)
@@ -43,12 +48,13 @@ Regime: {emoji} {regime}
         message += f"""
 {i}. {stock['symbol']}
    💵 Allocation: ₹{allocation}
-   📈 Current: ₹{stock['current_price']}
+   📈 Current Price: ₹{stock['current_price']}
    📍 Entry Zone: {lower} – {upper}
    🎯 Confidence: {stock['final_score']}%
 """
 
     return message
+
 
 def send_btst_alert(index, close, sma, regime, capital, stocks):
 
