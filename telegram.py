@@ -2,7 +2,7 @@ import requests
 from datetime import datetime
 
 TELEGRAM_TOKEN = "YOUR_BOT_TOKEN"
-TELEGRAM_CHAT_ID = "YOUR_CHAT_ID"
+TELEGRAM_CHAT_ID = "6278230258"
 
 def regime_emoji(regime):
     return {
