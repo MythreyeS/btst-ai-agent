@@ -69,6 +69,41 @@ def send_btst_alert(index, close, sma, regime, capital, stocks):
 
     response = requests.post(url, json=payload)
 
+    def send_weekend_summary(close, sma, regime):
+
+    from datetime import datetime
+
+    emoji = {
+        "BULLISH": "🟢",
+        "BEARISH": "🔴",
+        "NEUTRAL": "🟡"
+    }.get(regime, "⚪")
+
+    message = f"""📊 Weekend Market Recap
+
+Last Friday Close: {close}
+SMA20: {sma}
+Regime: {emoji} {regime}
+
+📌 Market closed for weekend.
+BTST Engine will resume Monday morning.
+
+— Powered by BTST AI Advisor
+"""
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message
+    }
+
+    response = requests.post(url, json=payload)
+
+    print("Weekend Telegram Response:", response.text)
+
+    return response.json()
+
     print("Telegram Response:", response.text)
 
     return response.json()
