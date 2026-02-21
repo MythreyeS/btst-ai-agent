@@ -1,6 +1,5 @@
 import yfinance as yf
 
-# You can later replace this with full NIFTY 50 list loader
 NIFTY_STOCKS = [
     "RELIANCE.NS",
     "HDFCBANK.NS",
@@ -8,7 +7,6 @@ NIFTY_STOCKS = [
     "ICICIBANK.NS",
     "TCS.NS"
 ]
-
 
 def select_stocks(regime):
 
@@ -26,7 +24,7 @@ def select_stocks(regime):
             sma50 = data["Close"].rolling(50).mean().iloc[-1]
             volume = data["Volume"].iloc[-1]
 
-            # Basic regime filtering
+            # Regime filter
             if regime == "BULLISH" and close < sma50:
                 continue
             if regime == "BEARISH" and close > sma50:
@@ -35,12 +33,15 @@ def select_stocks(regime):
             if volume < 1000000:
                 continue
 
+            atr = (data["High"] - data["Low"]).rolling(14).mean().iloc[-1]
+            volatility = data["Close"].pct_change().std()
+
             selected.append({
                 "symbol": symbol,
                 "current_price": round(close, 2),
                 "entry_price": round(close, 2),
-                "atr": round((data["High"] - data["Low"]).rolling(14).mean().iloc[-1], 2),
-                "volatility": round(data["Close"].pct_change().std(), 4)
+                "atr": round(atr, 2),
+                "volatility": round(volatility, 4)
             })
 
         except Exception:
