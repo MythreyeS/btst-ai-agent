@@ -1,18 +1,30 @@
 import yfinance as yf
+import pandas as pd
 
-NIFTY_STOCKS = [
-    "RELIANCE.NS",
-    "HDFCBANK.NS",
-    "INFY.NS",
-    "ICICIBANK.NS",
-    "TCS.NS"
-]
+
+def get_nifty500_symbols():
+
+    # NSE official CSV URL (works without login)
+    url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
+
+    df = pd.read_csv(url)
+
+    symbols = df["Symbol"].tolist()
+
+    # Add .NS suffix
+    symbols = [symbol + ".NS" for symbol in symbols]
+
+    return symbols
+
 
 def select_stocks(regime):
 
+    symbols = get_nifty500_symbols()
+
     selected = []
 
-    for symbol in NIFTY_STOCKS:
+    for symbol in symbols:
+
         try:
             ticker = yf.Ticker(symbol)
             data = ticker.history(period="3mo")
@@ -30,7 +42,8 @@ def select_stocks(regime):
             if regime == "BEARISH" and close > sma50:
                 continue
 
-            if volume < 1000000:
+            # Liquidity filter
+            if volume < 200000:
                 continue
 
             atr = (data["High"] - data["Low"]).rolling(14).mean().iloc[-1]
