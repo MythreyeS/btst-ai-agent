@@ -1,10 +1,10 @@
 import requests
 from datetime import datetime
 
-# 🔴 PASTE YOUR REAL TOKEN HERE
+# 🔴 Replace with your real bot token
 TELEGRAM_TOKEN = "8376092514:AAH9eCBiPYtjfupuN5CjziZZU9PoXNDzZh4"
 
-# 🔴 YOUR CHAT ID (from getUpdates)
+# 🔴 Your chat ID
 TELEGRAM_CHAT_ID = "6278230258"
 
 
@@ -69,26 +69,25 @@ def send_btst_alert(index, close, sma, regime, capital, stocks):
 
     response = requests.post(url, json=payload)
 
-    def send_weekend_summary(close, sma, regime):
+    print("Telegram Response:", response.text)
 
-    from datetime import datetime
+    return response.json()
 
-    emoji = {
-        "BULLISH": "🟢",
-        "BEARISH": "🔴",
-        "NEUTRAL": "🟡"
-    }.get(regime, "⚪")
+
+def send_weekend_summary(close, sma, regime):
+
+    emoji = regime_emoji(regime)
+    date_str = datetime.now().strftime("%d %b %Y")
 
     message = f"""📊 Weekend Market Recap
+🗓 {date_str}
 
 Last Friday Close: {close}
 SMA20: {sma}
 Regime: {emoji} {regime}
 
 📌 Market closed for weekend.
-BTST Engine will resume Monday morning.
-
-— Powered by BTST AI Advisor
+BTST Engine resumes Monday.
 """
 
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -101,9 +100,5 @@ BTST Engine will resume Monday morning.
     response = requests.post(url, json=payload)
 
     print("Weekend Telegram Response:", response.text)
-
-    return response.json()
-
-    print("Telegram Response:", response.text)
 
     return response.json()
