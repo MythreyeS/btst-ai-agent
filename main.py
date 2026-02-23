@@ -1,41 +1,33 @@
-from datetime import datetime
 from agents.market_regime import get_market_regime
-from agents.stock_selector import select_stocks
-from agents.scoring_agent import score_stocks
-from agents.weekend_summary import get_last_friday_data
-from telegram import send_btst_alert, send_weekend_summary
+from agents.stock_selector import load_nifty500_universe
+from agents.scoring_agent import score_nifty500, RiskPolicy
+from telegram import send_btst_daily_report
 
 
 def main():
+    market = get_market_regime()
 
-    today = datetime.now().weekday()  # 0=Mon, 6=Sun
+    universe = load_nifty500_universe()
 
-    capital = 50000
+    policy = RiskPolicy(
+        capital=50000.0,
+        max_risk_pct_per_trade=0.02,
+        stop_atr_mult=1.0,
+        target_atr_mult=1.5
+    )
 
-    # Saturday (5) or Sunday (6)
-    if today in [5, 6]:
-        friday_data = get_last_friday_data()
+    result = score_nifty500(universe=universe, market_regime=market, policy=policy)
 
-        send_weekend_summary(
-            friday_data["close"],
-            friday_data["sma"],
-            friday_data["regime"]
-        )
-
-    else:
-        regime_data = get_market_regime()
-
-        candidates = select_stocks(regime_data["regime"])
-        scored = score_stocks(candidates)
-
-        send_btst_alert(
-            regime_data["index"],
-            regime_data["close"],
-            regime_data["sma"],
-            regime_data["regime"],
-            capital,
-            scored
-        )
+    send_btst_daily_report(
+        market_regime=market,
+        policy={
+            "capital": policy.capital,
+            "max_risk_pct_per_trade": policy.max_risk_pct_per_trade
+        },
+        sector_top=result.get("sector_top"),
+        man_of_match=result.get("man_of_match"),
+        top5=result.get("top5", [])
+    )
 
 
 if __name__ == "__main__":
