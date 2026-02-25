@@ -61,3 +61,18 @@ def fetch_nifty200_dynamic(cache_path: str = "data/nifty200.csv") -> List[str]:
 
     # last resort minimal set
     return ["RELIANCE.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", "TCS.NS", "LT.NS"]
+
+def load_universe(cache_path: str = "data/nifty200.csv"):
+    """
+    Compatibility function expected by main.py.
+    Returns a list of symbols like RELIANCE.NS
+    """
+    return fetch_nifty200_dynamic(cache_path=cache_path)
+
+def get_sector(symbol: str) -> str:
+    """
+    Compatibility function expected by main.py.
+    If you don't have sector mapping yet, return 'Unknown'.
+    Later: connect to your sector map / CSV / NSE mapping.
+    """
+    return "Unknown"
