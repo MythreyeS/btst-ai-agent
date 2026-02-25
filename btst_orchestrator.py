@@ -2,7 +2,7 @@
 
 from agents.market_regime import get_market_regime
 from agents.stock_selector import scan_top_movers
-from policy import get_policy
+from agents.capital_manager import get_policy
 from telegram import send_btst_daily_report
 
 
