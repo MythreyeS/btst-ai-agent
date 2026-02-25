@@ -4,7 +4,7 @@ import yfinance as yf
 
 from agents.regime_agent import get_market_regime
 from btst_orchestrator import run_btst_agents
-from agents.universe_manager import load_universe, get_sector
+from core.universe_manager import load_universe, get_sector
 from telegram import send_telegram
 
 CAPITAL = 100000
