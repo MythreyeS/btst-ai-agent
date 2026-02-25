@@ -28,3 +28,14 @@ def calculate_position_size(capital, risk_percent, entry, stop):
         return 0
     quantity = int(risk_amount / per_share_risk)
     return quantity
+
+import os
+
+def get_policy():
+    """
+    Stable policy contract used by btst_orchestrator.
+    """
+    return {
+        "capital": float(os.getenv("BTST_CAPITAL", "50000")),
+        "max_risk_pct_per_trade": float(os.getenv("BTST_RISK_PCT", "0.02")),
+    }
