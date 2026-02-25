@@ -1,6 +1,6 @@
 # btst_orchestrator.py
 
-from market_regime import get_market_regime
+from agent.market_regime import get_market_regime
 from stock_scanner import scan_top_movers
 from policy import get_policy
 from telegram import send_btst_daily_report
