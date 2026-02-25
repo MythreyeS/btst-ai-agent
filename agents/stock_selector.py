@@ -50,3 +50,25 @@ def load_universe():
         })
 
     return universe
+
+def scan_top_movers(*args, **kwargs):
+    """
+    Backward-compatible wrapper for orchestrator.
+    This lets btst_orchestrator import scan_top_movers even if your
+    internal function is named differently.
+    """
+    # ✅ If your actual function is named something else, map it here:
+    if "select_top_movers" in globals():
+        return select_top_movers(*args, **kwargs)
+
+    if "get_top_movers" in globals():
+        return get_top_movers(*args, **kwargs)
+
+    if "run_stock_selector" in globals():
+        return run_stock_selector(*args, **kwargs)
+
+    # If none found, raise a clear error so we know the real function name
+    raise ImportError(
+        "scan_top_movers wrapper couldn't find select_top_movers / get_top_movers / run_stock_selector "
+        "inside stock_selector.py. Please check the actual function name and map it here."
+    )
