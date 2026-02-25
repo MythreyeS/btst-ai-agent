@@ -178,12 +178,13 @@ def send_btst_daily_report(
     msg.append("")
     msg.append("⚠ AI-based system. Not guaranteed returns.")
 
-    def send_telegram(message):
+    final_message = "\n".join(msg)
+_send_message(final_message)
+
+
+def send_telegram(message: str):
     """
-    Backward-compatible wrapper 
+    Backward-compatible wrapper.
     """
     return _send_message(message)
-
-    final_message = "\n".join(msg)
-
-    _send_message(final_message)
+   
