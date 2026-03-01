@@ -3,13 +3,13 @@ import requests
 from datetime import datetime
 
 # ==========================================
-# 🔐 Telegram Credentials (GitHub Secrets)
+# 🔐 Telegram Credentials
 # ==========================================
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-MAX_MESSAGE_LENGTH = 4000  # Telegram limit safety
+MAX_MESSAGE_LENGTH = 4000
 
 
 # ==========================================
@@ -17,16 +17,13 @@ MAX_MESSAGE_LENGTH = 4000  # Telegram limit safety
 # ==========================================
 
 def _send_message(text: str):
-    """
-    Sends message to Telegram with auto-splitting.
-    """
+
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("Telegram credentials missing.")
         return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
-    # Split if too long
     parts = [
         text[i:i + MAX_MESSAGE_LENGTH]
         for i in range(0, len(text), MAX_MESSAGE_LENGTH)
@@ -42,7 +39,7 @@ def _send_message(text: str):
 
 
 # ==========================================
-# Main BTST Daily Report Sender
+# MAIN BTST DAILY REPORT
 # ==========================================
 
 def send_btst_daily_report(
@@ -52,24 +49,22 @@ def send_btst_daily_report(
     man_of_match: dict,
     movers: list
 ):
-    """
-    Builds and sends the full BTST daily Telegram report.
-    """
 
     date_str = datetime.now().strftime("%d %b %Y")
-
     msg = []
 
-    # =============================
-    # Header
-    # =============================
+    # ======================================
+    # HEADER
+    # ======================================
+
     msg.append("📊 BTST AI Engine – Institutional Market Report")
     msg.append(f"🗓 Date: {date_str}")
     msg.append("")
 
-    # =============================
-    # Market Regime
-    # =============================
+    # ======================================
+    # MARKET REGIME
+    # ======================================
+
     if market_regime:
         msg.append(f"Market Regime: {market_regime.get('regime')}")
         msg.append(f"NIFTY Close: {market_regime.get('close')}")
@@ -79,19 +74,19 @@ def send_btst_daily_report(
         )
         msg.append("")
 
-    # =============================
-    # Capital Policy
-    # =============================
+    # ======================================
+    # CAPITAL POLICY
+    # ======================================
+
     if policy:
-        capital = policy.get("capital")
-        risk_pct = policy.get("max_risk_pct_per_trade")
-        msg.append(f"💰 Capital: {capital}")
-        msg.append(f"⚠ Max Risk Per Trade: {risk_pct}")
+        msg.append(f"💰 Capital: ₹{policy.get('capital')}")
+        msg.append(f"⚠ Max Risk Per Trade: {policy.get('max_risk_pct_per_trade')}")
         msg.append("")
 
-    # =============================
-    # Strongest Sector
-    # =============================
+    # ======================================
+    # STRONGEST SECTOR
+    # ======================================
+
     if sector_top:
         msg.append("🏆 Strongest Sector Today:")
         msg.append(
@@ -100,9 +95,10 @@ def send_btst_daily_report(
         )
         msg.append("")
 
-    # =============================
-    # Man of the Match
-    # =============================
+    # ======================================
+    # MAN OF THE MATCH
+    # ======================================
+
     if man_of_match:
         msg.append("🔥 Man of the Match:")
         msg.append(
@@ -112,13 +108,110 @@ def send_btst_daily_report(
         msg.append(
             f"PrevClose {man_of_match.get('prev_close')} → "
             f"Open {man_of_match.get('day_open')} → "
+            f"High {man_of_match.get('day_high')} → "
             f"Close {man_of_match.get('day_close')}"
         )
         msg.append("")
 
-    # =============================
-    # Full Movers List
-    # =============================
+    # ======================================
+    # YESTERDAY SUGGESTED STOCKS PERFORMANCE
+    # ======================================
+
+    msg.append("📊 Yesterday Suggested Stocks – Performance Review")
+    msg.append("Symbol | Sector | Buy | Now | P/L% | Status")
+    msg.append("------------------------------------------------")
+
+    sector_summary = {}
+    best_stock = None
+    best_return = -999
+
+    if movers:
+
+        for s in movers:
+
+            symbol = s.get("symbol")
+            sector = s.get("sector", "Unknown")
+
+            buy_price = float(s.get("prev_close", 0))
+            now_price = float(s.get("day_close", 0))
+            high = float(s.get("day_high", 0))
+            low = float(s.get("day_low", 0))
+
+            stop_loss = s.get("stop_loss")
+            target = s.get("target")
+
+            pnl_pct = ((now_price - buy_price) / buy_price) * 100 if buy_price else 0
+
+            # Arrow
+            if pnl_pct > 0:
+                arrow = "🟢▲"
+            elif pnl_pct < 0:
+                arrow = "🔴▼"
+            else:
+                arrow = "⚪"
+
+            # SL / Target detection
+            status = "Running"
+            if target and high >= target:
+                status = "🎯 Target Hit"
+            elif stop_loss and low <= stop_loss:
+                status = "🛑 SL Hit"
+
+            msg.append(
+                f"{symbol} | {sector} | {buy_price} | "
+                f"{now_price} | {round(pnl_pct,2)}% {arrow} | {status}"
+            )
+
+            # Track best performer
+            if pnl_pct > best_return:
+                best_return = pnl_pct
+                best_stock = symbol
+
+            # Sector aggregation
+            if sector not in sector_summary:
+                sector_summary[sector] = []
+
+            sector_summary[sector].append(pnl_pct)
+
+    else:
+        msg.append("No suggested stocks.")
+
+    msg.append("")
+
+    # ======================================
+    # MAN OF THE MATCH (Performance Based)
+    # ======================================
+
+    if best_stock:
+        msg.append(f"🏆 Best Performer: {best_stock} ({round(best_return,2)}%)")
+        msg.append("")
+
+    # ======================================
+    # SECTOR SUMMARY
+    # ======================================
+
+    if sector_summary:
+        msg.append("📈 Sector Performance Summary")
+
+        for sector, returns in sector_summary.items():
+
+            avg_return = sum(returns) / len(returns)
+
+            if avg_return > 0:
+                sector_arrow = "🟢▲"
+            elif avg_return < 0:
+                sector_arrow = "🔴▼"
+            else:
+                sector_arrow = "⚪"
+
+            msg.append(f"{sector}: {round(avg_return,2)}% {sector_arrow}")
+
+        msg.append("")
+
+    # ======================================
+    # TOP MOVERS
+    # ======================================
+
     msg.append("📈 Top Movers Today:")
 
     if movers:
@@ -128,10 +221,10 @@ def send_btst_daily_report(
             reverse=True
         )
 
-        for i, s in enumerate(sorted_movers, start=1):
+        for i, s in enumerate(sorted_movers[:10], start=1):
             msg.append(
                 f"{i}) {s.get('symbol')} | "
-                f"Intraday: {s.get('intraday_pct')}% | "
+                f"{s.get('intraday_pct')}% | "
                 f"Prob: {s.get('probability_edge')}%"
             )
     else:
@@ -140,20 +233,13 @@ def send_btst_daily_report(
     msg.append("")
     msg.append("⚠ AI-based system. Not guaranteed returns.")
 
-    # =============================
-    # Final Send
-    # =============================
-
     final_message = "\n".join(msg)
     _send_message(final_message)
 
 
 # ==========================================
-# Backward-Compatible Wrapper
+# Simple Wrapper
 # ==========================================
 
 def send_telegram(message: str):
-    """
-    Simple wrapper for basic text sending.
-    """
     _send_message(message)
