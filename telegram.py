@@ -179,7 +179,7 @@ def send_btst_daily_report(
     msg.append("⚠ AI-based system. Not guaranteed returns.")
 
 # Finalize and send message
-final_message = "\n".join(msg)
+    final_message = "\n".join(msg)
 _send_message(final_message)
 
 def send_telegram(message: str):
