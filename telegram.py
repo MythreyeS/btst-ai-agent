@@ -3,7 +3,7 @@ import requests
 from datetime import datetime
 
 # ==========================================
-# 🔐 Telegram Credentials
+# 🔐 Telegram Credentials (GitHub Secrets)
 # ==========================================
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -13,7 +13,7 @@ MAX_MESSAGE_LENGTH = 4000
 
 
 # ==========================================
-# Internal Send Function
+# Internal Send Function (HTML Enabled)
 # ==========================================
 
 def _send_message(text: str):
@@ -32,7 +32,8 @@ def _send_message(text: str):
     for part in parts:
         payload = {
             "chat_id": TELEGRAM_CHAT_ID,
-            "text": part
+            "text": part,
+            "parse_mode": "HTML"
         }
         response = requests.post(url, json=payload)
         print("Telegram Response:", response.text)
@@ -57,8 +58,8 @@ def send_btst_daily_report(
     # HEADER
     # ======================================
 
-    msg.append("📊 BTST AI Engine – Institutional Market Report")
-    msg.append(f"🗓 Date: {date_str}")
+    msg.append("📊 <b>BTST AI Engine – Institutional Market Report</b>")
+    msg.append(f"🗓 <b>Date:</b> {date_str}")
     msg.append("")
 
     # ======================================
@@ -66,7 +67,7 @@ def send_btst_daily_report(
     # ======================================
 
     if market_regime:
-        msg.append(f"Market Regime: {market_regime.get('regime')}")
+        msg.append(f"<b>Market Regime:</b> {market_regime.get('regime')}")
         msg.append(f"NIFTY Close: {market_regime.get('close')}")
         msg.append(
             f"SMA20: {market_regime.get('sma20')} | "
@@ -79,8 +80,11 @@ def send_btst_daily_report(
     # ======================================
 
     if policy:
-        msg.append(f"💰 Capital: ₹{policy.get('capital')}")
-        msg.append(f"⚠ Max Risk Per Trade: {policy.get('max_risk_pct_per_trade')}")
+        msg.append(f"💰 <b>Capital:</b> ₹{policy.get('capital')}")
+        msg.append(
+            f"⚠ <b>Max Risk Per Trade:</b> "
+            f"{policy.get('max_risk_pct_per_trade')}"
+        )
         msg.append("")
 
     # ======================================
@@ -88,7 +92,7 @@ def send_btst_daily_report(
     # ======================================
 
     if sector_top:
-        msg.append("🏆 Strongest Sector Today:")
+        msg.append("🏆 <b>Strongest Sector Today</b>")
         msg.append(
             f"{sector_top.get('sector')} "
             f"(Avg Intraday: {sector_top.get('avg_intraday_pct')}%)"
@@ -96,11 +100,11 @@ def send_btst_daily_report(
         msg.append("")
 
     # ======================================
-    # MAN OF THE MATCH
+    # MAN OF THE MATCH (Intraday)
     # ======================================
 
     if man_of_match:
-        msg.append("🔥 Man of the Match:")
+        msg.append("🔥 <b>Man of the Match</b>")
         msg.append(
             f"{man_of_match.get('symbol')} | "
             f"{man_of_match.get('sector')}"
@@ -114,12 +118,15 @@ def send_btst_daily_report(
         msg.append("")
 
     # ======================================
-    # YESTERDAY SUGGESTED STOCKS PERFORMANCE
+    # YESTERDAY SUGGESTED STOCKS – PERFORMANCE
     # ======================================
 
-    msg.append("📊 Yesterday Suggested Stocks – Performance Review")
-    msg.append("Symbol | Sector | Buy | Now | P/L% | Status")
-    msg.append("------------------------------------------------")
+    msg.append("📊 <b>Yesterday Suggested Stocks – Performance Review</b>")
+    msg.append("<pre>")
+
+    header = f"{'Symbol':<10}{'Sector':<15}{'Buy':>8}{'Now':>8}{'P/L%':>8}   Status"
+    msg.append(header)
+    msg.append("-" * 70)
 
     sector_summary = {}
     best_stock = None
@@ -129,8 +136,8 @@ def send_btst_daily_report(
 
         for s in movers:
 
-            symbol = s.get("symbol")
-            sector = s.get("sector", "Unknown")
+            symbol = s.get("symbol", "")[:9]
+            sector = s.get("sector", "Unknown")[:14]
 
             buy_price = float(s.get("prev_close", 0))
             now_price = float(s.get("day_close", 0))
@@ -140,9 +147,12 @@ def send_btst_daily_report(
             stop_loss = s.get("stop_loss")
             target = s.get("target")
 
-            pnl_pct = ((now_price - buy_price) / buy_price) * 100 if buy_price else 0
+            pnl_pct = (
+                ((now_price - buy_price) / buy_price) * 100
+                if buy_price else 0
+            )
 
-            # Arrow
+            # Arrow indicator
             if pnl_pct > 0:
                 arrow = "🟢▲"
             elif pnl_pct < 0:
@@ -157,10 +167,16 @@ def send_btst_daily_report(
             elif stop_loss and low <= stop_loss:
                 status = "🛑 SL Hit"
 
-            msg.append(
-                f"{symbol} | {sector} | {buy_price} | "
-                f"{now_price} | {round(pnl_pct,2)}% {arrow} | {status}"
+            row = (
+                f"{symbol:<10}"
+                f"{sector:<15}"
+                f"{buy_price:>8.2f}"
+                f"{now_price:>8.2f}"
+                f"{pnl_pct:>7.2f}% {arrow}  "
+                f"{status}"
             )
+
+            msg.append(row)
 
             # Track best performer
             if pnl_pct > best_return:
@@ -176,25 +192,28 @@ def send_btst_daily_report(
     else:
         msg.append("No suggested stocks.")
 
+    msg.append("</pre>")
     msg.append("")
 
     # ======================================
-    # MAN OF THE MATCH (Performance Based)
+    # BEST PERFORMER (Portfolio)
     # ======================================
 
     if best_stock:
-        msg.append(f"🏆 Best Performer: {best_stock} ({round(best_return,2)}%)")
+        msg.append(
+            f"🏆 <b>Best Performer:</b> "
+            f"{best_stock} ({round(best_return,2)}%)"
+        )
         msg.append("")
 
     # ======================================
-    # SECTOR SUMMARY
+    # FULL SECTOR SUMMARY
     # ======================================
 
     if sector_summary:
-        msg.append("📈 Sector Performance Summary")
+        msg.append("📈 <b>Sector Performance Summary</b>")
 
         for sector, returns in sector_summary.items():
-
             avg_return = sum(returns) / len(returns)
 
             if avg_return > 0:
@@ -204,15 +223,17 @@ def send_btst_daily_report(
             else:
                 sector_arrow = "⚪"
 
-            msg.append(f"{sector}: {round(avg_return,2)}% {sector_arrow}")
+            msg.append(
+                f"{sector}: {round(avg_return,2)}% {sector_arrow}"
+            )
 
         msg.append("")
 
     # ======================================
-    # TOP MOVERS
+    # TOP 10 MOVERS
     # ======================================
 
-    msg.append("📈 Top Movers Today:")
+    msg.append("📈 <b>Top Movers Today</b>")
 
     if movers:
         sorted_movers = sorted(
