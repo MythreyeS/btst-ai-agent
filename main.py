@@ -34,16 +34,7 @@ def main():
             regime_note = "🚀 Bullish Momentum Active"
             allocation_multiplier = 1.0
 
-        # -------------------------------------------------
-        # 2️⃣ Load Universe
-        # -------------------------------------------------
-        symbols = load_universe()
-
-        # -------------------------------------------------
-        # 3️⃣ Run BTST Agents (No Regime Blocking)
-        # -------------------------------------------------
-        shortlisted = run_btst_agents(symbols)
-
+             shortlisted = run_btst_agents()
         # -------------------------------------------------
         # 4️⃣ Format Message
         # -------------------------------------------------
