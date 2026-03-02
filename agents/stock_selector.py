@@ -1,74 +1,61 @@
+import yfinance as yf
 import pandas as pd
+from datetime import datetime
 
-NIFTY500_CSV_URL = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
+from core.universe_manager import load_universe
 
 
-def load_universe():
+def scan_top_movers():
     """
-    Returns list of dicts:
-    [
-        {"symbol": "RELIANCE.NS", "sector": "Oil & Gas"},
-        ...
-    ]
+    Returns:
+        movers (list of dict)
+        sector_top (str)
+        man_of_match (dict)
     """
 
-    try:
-        df = pd.read_csv(NIFTY500_CSV_URL)
-    except Exception:
-        # If NSE fails temporarily, fallback to a safer minimal list
-        return [
-            {"symbol": "RELIANCE.NS", "sector": "Energy"},
-            {"symbol": "HDFCBANK.NS", "sector": "Banking"},
-            {"symbol": "INFY.NS", "sector": "IT"},
-            {"symbol": "ICICIBANK.NS", "sector": "Banking"},
-            {"symbol": "TCS.NS", "sector": "IT"},
-        ]
+    universe = load_universe()
 
-    # NSE file usually contains: Symbol, Company Name, Industry, Series, ISIN Code
-    symbol_col = "Symbol" if "Symbol" in df.columns else df.columns[0]
-    sector_col = "Industry" if "Industry" in df.columns else None
+    results = []
 
-    universe = []
+    for stock in universe[:100]:  # limit to 100 for stability
+        symbol = stock["symbol"]
+        sector = stock["sector"]
 
-    for _, row in df.iterrows():
+        try:
+            df = yf.download(symbol, period="2d", interval="1d", progress=False)
 
-        symbol = str(row[symbol_col]).strip()
+            if len(df) < 2:
+                continue
 
-        # Skip invalid rows
-        if not symbol or symbol == "nan":
+            prev_close = df["Close"].iloc[-2]
+            close = df["Close"].iloc[-1]
+
+            change_pct = ((close - prev_close) / prev_close) * 100
+
+            results.append({
+                "symbol": symbol,
+                "sector": sector,
+                "change_pct": round(change_pct, 2),
+                "prev_close": round(prev_close, 2),
+                "close": round(close, 2),
+            })
+
+        except Exception:
             continue
 
-        sector = (
-            str(row[sector_col]).strip()
-            if sector_col and sector_col in row
-            else "Unknown"
-        )
+    if not results:
+        return [], "N/A", {}
 
-        universe.append({
-            "symbol": f"{symbol}.NS",
-            "sector": sector
-        })
+    # Sort by % change
+    results = sorted(results, key=lambda x: x["change_pct"], reverse=True)
 
-    return universe
+    top5 = results[:5]
 
-def scan_top_movers(*args, **kwargs):
-    """
-    Backward-compatible wrapper for orchestrator.
-    This lets btst_orchestrator import scan_top_movers even if your
-    internal function is named differently.
-    """
-    # ✅ If your actual function is named something else, map it here:
-    if "select_top_movers" in globals():
-        return select_top_movers(*args, **kwargs)
+    # Man of the Match = highest gainer
+    man_of_match = top5[0]
 
-    if "get_top_movers" in globals():
-        return get_top_movers(*args, **kwargs)
+    # Sector leader = most repeated sector in top 5
+    sectors = [x["sector"] for x in top5]
+    sector_top = max(set(sectors), key=sectors.count)
 
-    if "run_stock_selector" in globals():
-        return run_stock_selector(*args, **kwargs)
-
-    # If none found, raise a clear error so we know the real function name
-    raise ImportError(
-        "scan_top_movers wrapper couldn't find select_top_movers / get_top_movers / run_stock_selector "
-        "inside stock_selector.py. Please check the actual function name and map it here."
-    )
+    return top5, sector_top, man_of_match
