@@ -44,10 +44,11 @@ def evening_btst():
 """
 
     if regime == "BEARISH":
-        msg = header + "\n\n❌ <b>No Trade Today</b>\nReason: Regime bearish."
-        send_telegram(msg)
-        return
+    regime_note = "⚠ Bearish – Hunter Mode Active"
+else:
+    regime_note = "🚀 Bullish Momentum"
 
+# Continue scanning stocks normally
     selected = run_btst_agents(universe)
 
     if not selected:
