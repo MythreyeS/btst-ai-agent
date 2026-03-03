@@ -4,18 +4,19 @@ from typing import List
 
 NIFTY200_WIKI_URL = "https://en.wikipedia.org/wiki/NIFTY_200"
 
+
 def _normalize_symbol(s: str) -> str:
     s = str(s).strip().upper()
     if not s.endswith(".NS"):
         s = s + ".NS"
     return s
 
+
 def fetch_nifty200_dynamic(cache_path: str = "data/nifty200.csv") -> List[str]:
     """
     Tries:
       1) Wikipedia table scrape (read_html)
       2) local cache file fallback (data/nifty200.csv)
-
     Returns list of Yahoo symbols like RELIANCE.NS
     """
     # 1) Wikipedia scrape
@@ -28,7 +29,6 @@ def fetch_nifty200_dynamic(cache_path: str = "data/nifty200.csv") -> List[str]:
             if any("symbol" in c for c in cols) or any("ticker" in c for c in cols):
                 candidate = t
                 break
-
         if candidate is not None:
             # Try common column names
             col = None
@@ -62,12 +62,15 @@ def fetch_nifty200_dynamic(cache_path: str = "data/nifty200.csv") -> List[str]:
     # last resort minimal set
     return ["RELIANCE.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", "TCS.NS", "LT.NS"]
 
+
 def load_universe(cache_path: str = "data/nifty200.csv"):
     """
-    Compatibility function expected by main.py.
-    Returns a list of symbols like RELIANCE.NS
+    Returns a list of dicts: [{"symbol": "RELIANCE.NS", "sector": "Unknown"}, ...]
+    Compatible with stock_selector.py which expects stock["symbol"] and stock["sector"]
     """
-    return fetch_nifty200_dynamic(cache_path=cache_path)
+    symbols = fetch_nifty200_dynamic(cache_path=cache_path)
+    return [{"symbol": s, "sector": get_sector(s)} for s in symbols]  # ✅ FIXED
+
 
 def get_sector(symbol: str) -> str:
     """
