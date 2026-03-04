@@ -3,25 +3,50 @@ from core.universe_manager import load_universe
 
 
 def scan_top_movers():
+    """
+    Returns:
+      movers: list[dict]
+      sector_top: str
+      man_of_match: dict
+    movers dict format:
+      {
+        "symbol": "RELIANCE.NS",
+        "sector": "Energy",
+        "change_pct": 1.23,
+        "prev_close": 2450.0,
+        "close": 2480.0
+      }
+    """
 
-    universe = load_universe()
+    universe = load_universe()  # must return list of {"symbol":..., "sector":...}
+
     results = []
 
-    for stock in universe[:50]:
+    # Keep it stable (yfinance rate limits if you do 500 at once)
+    for stock in universe[:80]:
+        # Strong validation: stock MUST be a dict
+        if not isinstance(stock, dict):
+            continue
 
-        symbol = stock["symbol"]
-        sector = stock["sector"]
+        symbol = stock.get("symbol")
+        sector = stock.get("sector", "Unknown")
+
+        if not symbol:
+            continue
 
         try:
             df = yf.download(symbol, period="2d", interval="1d", progress=False)
 
-            if len(df) < 2:
+            if df is None or len(df) < 2:
                 continue
 
             prev_close = float(df["Close"].iloc[-2])
             close = float(df["Close"].iloc[-1])
 
-            change_pct = ((close - prev_close) / prev_close) * 100
+            if prev_close == 0:
+                continue
+
+            change_pct = ((close - prev_close) / prev_close) * 100.0
 
             results.append({
                 "symbol": symbol,
@@ -31,19 +56,23 @@ def scan_top_movers():
                 "close": round(close, 2),
             })
 
-        except:
+        except Exception:
             continue
 
     if not results:
         return [], "N/A", {}
 
-    results = sorted(results, key=lambda x: x["change_pct"], reverse=True)
+    results.sort(key=lambda x: x["change_pct"], reverse=True)
 
-    top5 = results[:5]
+    movers = results[:5]
+    man_of_match = movers[0]
 
-    man_of_match = top5[0]
+    # Sector leader based on top-5 dominance
+    sector_counts = {}
+    for r in movers:
+        sec = r.get("sector", "Unknown")
+        sector_counts[sec] = sector_counts.get(sec, 0) + 1
 
-    sectors = [x["sector"] for x in top5]
-    sector_top = max(set(sectors), key=sectors.count)
+    sector_top = max(sector_counts, key=sector_counts.get) if sector_counts else "N/A"
 
-    return top5, sector_top, man_of_match
+    return movers, sector_top, man_of_match
